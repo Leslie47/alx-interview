@@ -1,54 +1,64 @@
 #!/usr/bin/python3
+"""Log parsing"""
 
 import sys
+import signal
 
 
-def print_msg(dict_sc, total_file_size):
-    """
-    Method to print
-    Args:
-        dict_sc: dict of status codes
-        total_file_size: total of the file
-    Returns:
-        Nothing
-    """
-
-    print("File size: {}".format(total_file_size))
-    for key, val in sorted(dict_sc.items()):
-        if val != 0:
-            print("{}: {}".format(key, val))
+total_size = 0
+status_codes = {200: 0, 301: 0, 400: 0, 401: 0, 403: 0, 404: 0, 405: 0, 500: 0}
+line_count = 0
 
 
-total_file_size = 0
-code = 0
-counter = 0
-dict_sc = {"200": 0,
-           "301": 0,
-           "400": 0,
-           "401": 0,
-           "403": 0,
-           "404": 0,
-           "405": 0,
-           "500": 0}
+def print_stats():
+    """Prints the stats"""
+    print("File size: {}".format(total_size))
+    for key, value in sorted(status_codes.items()):
+        if value != 0:
+            print("{}: {}".format(key, value))
 
+
+def signal_handler(sig, frame):
+    """Signal handler"""
+    print_stats()
+    sys.exit(0)
+
+
+# Set up signal handler for CTRL+C
+signal.signal(signal.SIGINT, signal_handler)
+
+# Read from stdin
 try:
     for line in sys.stdin:
-        parsed_line = line.split()  # ✄ trimming
-        parsed_line = parsed_line[::-1]  # inverting
+        line_count += 1
+        data = line.split()
+        if len(data) < 7:
+            continue
 
-        if len(parsed_line) > 2:
-            counter += 1
+        # Get the data
+        try:
+            ip = data[0]
+            date = data[3][1:]
+            method = data[5][1:]
+            path = data[6]
+            protocol = data[7][:-1]
+            status_code = int(data[8])
+            size = int(data[9])
+        except (ValueError, IndexError):
+            continue
 
-            if counter <= 10:
-                total_file_size += int(parsed_line[0])  # file size
-                code = parsed_line[1]  # status code
+        # Ensure the format matches
+        if (method == 'GET' and path ==
+                '/projects/260' and
+                protocol == 'HTTP/1.1'):
+            total_size += size
+            if status_code in status_codes:
+                status_codes[status_code] += 1
+            line
 
-                if (code in dict_sc.keys()):
-                    dict_sc[code] += 1
-
-            if (counter == 10):
-                print_msg(dict_sc, total_file_size)
-                counter = 0
-
-finally:
-    print_msg(dict_sc, total_file_size)
+        # Print stats every 10 lines
+        if line_count % 10 == 0:
+            print_stats()
+except KeyboardInterrupt:
+    print_stats()
+    sys.exit(0)
